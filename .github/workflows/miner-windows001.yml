@@ -1,0 +1,50 @@
+name: Pearl Miner Windows Package
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        shell: bash
+        run: |
+          pip install uv
+
+      - name: Install miner
+        shell: bash
+        run: |
+          uv sync --package vllm-miner
+
+      - name: Package miner
+        shell: bash
+        run: |
+          mkdir dist
+
+          cp -r miner/pearl-gateway dist/
+          cp -r miner/vllm-miner dist/
+
+          cd dist
+          7z a ../pearl-miner-windows.zip *
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: pearl-miner-windows
+          path: pearl-miner-windows.zip
