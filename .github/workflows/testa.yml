@@ -1,0 +1,78 @@
+name: Blockchain / Build & Publish Windows
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sha:
+    runs-on: ubuntu-latest
+    outputs:
+      sha_short: ${{ steps.sha.outputs.sha_short }}
+    steps:
+      - name: Compute short SHA
+        id: sha
+        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+  build-windows:
+    needs: sha
+    runs-on: windows-latest
+
+    env:
+      SHA_SHORT: ${{ needs.sha.outputs.sha_short }}
+      GOFLAGS: -ldflags=-X=github.com/pearl-research-labs/pearl/version.Build=${{ needs.sha.outputs.sha_short }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Add Rust target
+        shell: bash
+        run: |
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Build pear-gateway and vllm-miner
+        shell: bash
+        run: |
+          export CARGO_BUILD_TARGET=x86_64-pc-windows-gnu
+
+          mkdir -p bin
+
+          go build -tags xmss,zkpow -o bin/pear-gateway.exe ./node/cmd/pear-gateway
+          go build -tags xmss,zkpow -o bin/vllm-miner.exe ./node/cmd/vllm-miner
+
+      - name: Check binaries
+        shell: bash
+        run: |
+          ls -lah bin/
+
+      - name: Package Windows binaries
+        shell: bash
+        run: |
+          mkdir dist
+
+          cp bin/pear-gateway.exe dist/
+          cp bin/vllm-miner.exe dist/
+
+          cd dist
+          7z a ../pearl-windows-amd64-${{ env.SHA_SHORT }}.zip *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pearl-windows-amd64
+          path: pearl-windows-amd64-${{ env.SHA_SHORT }}.zip
+          retention-days: 30
