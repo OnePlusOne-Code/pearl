@@ -1,0 +1,127 @@
+name: Pearl Miner Windows Build
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+
+      # -----------------------------
+      # Rust environment
+      # -----------------------------
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+
+      # -----------------------------
+      # Python environment
+      # -----------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+
+      # -----------------------------
+      # Prepare output
+      # -----------------------------
+      - name: Create dist directory
+        shell: bash
+        run: |
+          mkdir -p dist
+
+
+      # -----------------------------
+      # Build pearl-gateway
+      # -----------------------------
+      - name: Build pearl-gateway.exe
+        shell: bash
+        run: |
+          cd miner/pearl-gateway
+
+          cargo build --release
+
+          cp target/release/pearl-gateway.exe ../../dist/
+
+
+      # -----------------------------
+      # Build vllm-miner
+      # -----------------------------
+      - name: Install vllm-miner dependencies
+        shell: bash
+        run: |
+          cd miner
+
+          python -m pip install --upgrade pip
+          pip install uv
+
+          uv sync --package vllm-miner
+
+          pip install pyinstaller
+
+
+      - name: Build vllm-miner.exe
+        shell: bash
+        run: |
+          cd miner/vllm-miner
+
+          pyinstaller \
+            --onefile \
+            --name vllm-miner \
+            --collect-all vllm \
+            --collect-all torch \
+            .
+
+          cp dist/vllm-miner.exe ../../dist/
+
+
+      # -----------------------------
+      # Verify
+      # -----------------------------
+      - name: Check output
+        shell: bash
+        run: |
+          ls -lah dist/
+
+
+      # -----------------------------
+      # Package
+      # -----------------------------
+      - name: Package Windows release
+        shell: bash
+        run: |
+          cd dist
+
+          7z a ../pearl-miner-windows.zip *
+
+
+      # -----------------------------
+      # Upload
+      # -----------------------------
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pearl-miner-windows
+          path: pearl-miner-windows.zip
+          retention-days: 30
