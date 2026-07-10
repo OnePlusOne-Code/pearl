@@ -1,0 +1,37 @@
+name: Build Pearl Miner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  miner:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Install miner dependencies
+      run: |
+        uv sync --package vllm-miner
+
+    - name: Build gateway
+      run: |
+        uv sync --package pearl-gateway
+
+    - name: Pack
+      run: |
+        tar czf pearl-miner.tar.gz \
+          miner/pearl-gateway \
+          miner/vllm-miner
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: pearl-miner
+        path: pearl-miner.tar.gz
